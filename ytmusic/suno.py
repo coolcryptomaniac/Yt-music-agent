@@ -36,6 +36,18 @@ _AUDIO_KEYS = ("audio_url", "audioUrl")
 _ID_KEYS = ("id", "clip_id")
 
 DEFAULT_SELECTORS: dict[str, list[str]] = {
+    # Suno's 2026 UI opens on a single "Chat to make music" box; the per-field custom
+    # form is behind "Advanced". Both layouts are supported, see `submit()`.
+    "simple_prompt": [
+        'textarea[placeholder="Chat to make music"]',
+        'textarea[placeholder*="make music" i]',
+        'textarea[placeholder*="song about" i]',
+        'textarea[placeholder*="describe" i]',
+    ],
+    "advanced_toggle": [
+        'button:has-text("Advanced")',
+        '[role="button"]:has-text("Advanced")',
+    ],
     "custom_toggle": [
         'button:has-text("Custom")',
         '[role="tab"]:has-text("Custom")',
@@ -122,6 +134,8 @@ class SunoSession:
         self._browser: Any = None
         self._context: Any = None
         self.page: Any = None
+        # "custom" = per-field form, "simple" = single chat prompt box.
+        self.mode = "custom"
         self._clips: dict[str, dict[str, str]] = {}
 
     def __enter__(self) -> SunoSession:
@@ -219,33 +233,62 @@ class SunoSession:
         if not self.page.url.startswith(CREATE_URL):
             self.page.goto(CREATE_URL, wait_until="domcontentloaded", timeout=90000)
         self.page.wait_for_timeout(2000)
+
+        mode = str(self.config.get("music.suno_mode", "auto")).lower()
+        if mode == "simple":
+            self.mode = "simple"
+            return
+
+        # Reveal the per-field form: newer builds hide it behind "Advanced", older ones
+        # behind a "Custom" tab.
+        for toggle in ("advanced_toggle", "custom_toggle"):
+            try:
+                self._first(toggle, timeout=4000).click()
+                self.page.wait_for_timeout(1200)
+                break
+            except SunoError:
+                continue
         try:
-            self._first("custom_toggle", timeout=5000).click()
-            self.page.wait_for_timeout(800)
+            self._first("style_input", timeout=4000)
+            self.mode = "custom"
         except SunoError:
-            LOGGER.info("custom mode toggle not found; assuming custom mode is already active")
+            if mode == "custom":
+                raise
+            LOGGER.warning("custom style field not found; falling back to the simple prompt box")
+            self.mode = "simple"
+
+    def simple_prompt(self, plan: TrackPlan) -> str:
+        """One-box prompt used when the per-field form is unavailable."""
+        parts = [plan.suno_style.rstrip(". ")]
+        if plan.instrumental:
+            parts.append("fully instrumental, no vocals, no lyrics")
+        parts.append(f'title it "{plan.title}"')
+        return ". ".join(parts)
 
     def submit(self, plan: TrackPlan) -> None:
         """Fill the create form and hit Create."""
         assert self.page is not None
 
-        if plan.instrumental:
-            try:
-                self._first("instrumental_toggle", timeout=4000).click()
-                self.page.wait_for_timeout(500)
-            except SunoError:
-                LOGGER.info("instrumental toggle not found; relying on prompt wording")
+        if self.mode == "simple":
+            self._fill("simple_prompt", self.simple_prompt(plan))
         else:
-            self._fill("lyrics_input", plan.suno_lyrics)
+            if plan.instrumental:
+                try:
+                    self._first("instrumental_toggle", timeout=4000).click()
+                    self.page.wait_for_timeout(500)
+                except SunoError:
+                    LOGGER.info("instrumental toggle not found; relying on prompt wording")
+            else:
+                self._fill("lyrics_input", plan.suno_lyrics)
 
-        self._fill("style_input", plan.suno_style)
-        try:
-            self._fill("title_input", plan.title)
-        except SunoError:
-            LOGGER.info("title field not found; Suno will auto-name the clip")
+            self._fill("style_input", plan.suno_style)
+            try:
+                self._fill("title_input", plan.title)
+            except SunoError:
+                LOGGER.info("title field not found; Suno will auto-name the clip")
 
         self._first("create_button").click()
-        LOGGER.info("track %02d: submitted to Suno", plan.index)
+        LOGGER.info("track %02d: submitted to Suno (%s mode)", plan.index, self.mode)
         self.page.wait_for_timeout(4000)
 
     def wait_for_audio(

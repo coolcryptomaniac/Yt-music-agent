@@ -29,7 +29,11 @@ music:
   # "inbox" -> pick up audio files you rendered yourself from ./inbox
   # "synth" -> ffmpeg-generated placeholder pads (offline smoke-testing only)
   provider: "suno"
-  # Suno "Custom" mode fields are generated per track by the LLM.
+  # How to drive suno.com:
+  #   "auto"   -> try the per-field custom form, fall back to the single prompt box
+  #   "custom" -> require the per-field form (style / lyrics / title)
+  #   "simple" -> always use the one-box "Chat to make music" prompt
+  suno_mode: "auto"
   instrumental: true
   # Paid plans allow wav; "mp3" is smaller and fine for YouTube (which re-encodes anyway).
   download_format: "mp3"
