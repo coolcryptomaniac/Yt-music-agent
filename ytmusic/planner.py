@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -128,12 +127,10 @@ def build_plans(config: Config, count: int | None = None) -> list[TrackPlan]:
         LOGGER.info("planning %d tracks with offline templates", count)
         raw_plans = offline_plans(config, count, seed if seed is None else int(seed))
     else:
-        fallback_config = None
-        alternate = "groq" if llm.provider == "gemini" else "gemini"
-        if os.environ.get(f"{alternate.upper()}_API_KEY", "").strip():
-            fallback_config = Config(data=config.data, path=config.path)
-            fallback_config.set("llm.provider", alternate)
-
+        # Try the configured provider first, then every other keyed provider.
+        chain = [llm] + [
+            LLM(config, provider=name) for name in LLM.available_providers() if name != llm.provider
+        ]
         prompt = PROMPT_TEMPLATE.format(
             channel_name=config.get("channel.name", "Music Channel"),
             niche=" ".join(str(config.get("channel.niche", "")).split()),
@@ -155,7 +152,7 @@ def build_plans(config: Config, count: int | None = None) -> list[TrackPlan]:
         )
         LOGGER.info("planning %d tracks with %s", count, llm.provider)
         payload: Any = None
-        for candidate in [llm] + ([LLM(fallback_config)] if fallback_config else []):
+        for candidate in chain:
             try:
                 payload = candidate.json(prompt, system=SYSTEM)
                 break

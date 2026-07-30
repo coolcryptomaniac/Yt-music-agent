@@ -80,13 +80,16 @@ metadata:
   base_tags: ["lofi", "lofi hip hop", "study music", "chillhop", "beats to relax study to"]
 
 llm:
-  # "gemini" (free tier), "groq" (free tier), "offline" (templates, no network)
+  # "gemini", "cerebras", "groq" (all free tiers) or "offline" (templates, no network).
+  # If the chosen provider has no key or keeps failing, the others are tried in the
+  # order gemini -> cerebras -> groq, then offline templates.
   provider: "gemini"
   # "gemini-flash-latest" tracks the current free-tier flash model; pinned names
   # such as gemini-2.5-flash are already closed to newly created API keys.
   gemini_model: "gemini-flash-latest"
   gemini_image_model: "gemini-2.5-flash-image"
   groq_model: "llama-3.3-70b-versatile"
+  cerebras_model: "llama-3.3-70b"
   temperature: 1.0
 
 paths:

@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--music", choices=["suno", "inbox", "synth"], default=None, help="audio source"
     )
-    parser.add_argument("--llm", choices=["gemini", "groq", "offline"], default=None)
+    parser.add_argument("--llm", choices=["gemini", "cerebras", "groq", "offline"], default=None)
     parser.add_argument("--niche", default=None, help="override the channel niche for this run")
     parser.add_argument("--channel", default=None, help="override the channel name")
     parser.add_argument("--label", default=None, help="output folder name (default: today)")
@@ -116,7 +116,7 @@ def _doctor(config: Config) -> int:
         print(f"{binary:10s}: {path or 'MISSING'}")
         ok = ok and bool(path)
 
-    for name in ("GEMINI_API_KEY", "GROQ_API_KEY"):
+    for name in ("GEMINI_API_KEY", "CEREBRAS_API_KEY", "GROQ_API_KEY"):
         print(f"{name:16s}: {'set' if os.environ.get(name) else 'not set'}")
 
     try:

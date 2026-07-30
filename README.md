@@ -29,7 +29,7 @@ out/2026-07-30/
 
 | Stage | Tool | Cost | Notes |
 | ----- | ---- | ---- | ----- |
-| Ideas, lyrics, Suno prompts, titles, descriptions, tags | Gemini `gemini-flash-latest`, or Groq Llama 3.3 70B | free tier | offline template fallback needs no key at all |
+| Ideas, lyrics, Suno prompts, titles, descriptions, tags | Gemini `gemini-flash-latest`, Cerebras or Groq Llama 3.3 70B | free tier | tried in that order; offline template fallback needs no key at all |
 | Music | Suno, browser-driven | your existing plan | no public API exists; paid plan also gives commercial-use rights |
 | Cover art | Pollinations (Flux) → Nano Banana → local Pillow renderer | free | first provider that answers wins |
 | Video | FFmpeg | free | unlimited length, no quota, no watermark |
@@ -59,11 +59,14 @@ python -m ytmusic doctor         # verifies binaries and API keys
 Keys are read from the environment:
 
 ```bash
-export GEMINI_API_KEY=...   # https://aistudio.google.com/apikey  (free)
-export GROQ_API_KEY=...     # https://console.groq.com/keys       (free, fallback)
+export GEMINI_API_KEY=...     # https://aistudio.google.com/apikey  (free)
+export CEREBRAS_API_KEY=...   # https://cloud.cerebras.ai           (free, fastest)
+export GROQ_API_KEY=...       # https://console.groq.com/keys       (free)
 ```
 
-Neither is mandatory: with no keys the planner falls back to built-in templates.
+None are mandatory: with no keys the planner falls back to built-in templates. With
+several, the others act as automatic failover when one is rate-limited or down
+(both happen regularly on free tiers).
 
 ## Suno login
 
