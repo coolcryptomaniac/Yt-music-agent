@@ -1,0 +1,95 @@
+# yt-music-agent configuration.
+# Everything here is overridable per-run via CLI flags (see `python -m ytmusic --help`).
+
+channel:
+  name: "Lofi Drift"
+  # Free-text niche description. This is the single most important knob: it steers
+  # ideas, lyrics, style prompts, artwork and metadata.
+  niche: >
+    Cozy late-night lofi hip hop and chillhop for studying, coding and sleeping.
+    Warm tape saturation, dusty vinyl crackle, mellow jazz chords, soft rain.
+  language: "English"
+  # Appended verbatim to every description.
+  cta: |
+    ---
+    New tracks every day. Subscribe for more late-night study beats.
+  # Applied to every description; keep your real business/legal text here.
+  legal: |
+    Music generated with Suno under a commercial-use plan.
+    Artwork AI-generated. All rights to this upload belong to the channel.
+
+batch:
+  # How many videos to produce per run. 5-10 recommended for a daily upload cadence.
+  count: 6
+  # Deterministic runs: set an int to reproduce a batch, null for fresh ideas daily.
+  seed: null
+
+music:
+  # "suno"  -> drive suno.com in a real browser (needs a logged-in Chrome, see README)
+  # "inbox" -> pick up audio files you rendered yourself from ./inbox
+  # "synth" -> ffmpeg-generated placeholder pads (offline smoke-testing only)
+  provider: "suno"
+  # Suno "Custom" mode fields are generated per track by the LLM.
+  instrumental: true
+  # Paid plans allow wav; "mp3" is smaller and fine for YouTube (which re-encodes anyway).
+  download_format: "mp3"
+  # Seconds. Tracks shorter than this are rejected and regenerated.
+  min_duration: 90
+  # Suno returns 2 variants per generation; keep the longest or the first.
+  variant_pick: "longest"
+
+art:
+  # Order matters: first provider that works wins, the rest are fallbacks.
+  # "pollinations"-> keyless Flux endpoint, genuinely free, no quota
+  # "gemini"      -> Nano Banana (gemini-2.5-flash-image). Better quality, but image
+  #                  output is NOT in the Gemini free tier: without billing on the key
+  #                  it returns 429. Move it first once billing is enabled.
+  # "local"       -> Pillow gradient/grain/vignette, always available offline
+  providers: ["pollinations", "gemini", "local"]
+  # 16:9 cover used as the video background and as the thumbnail base.
+  width: 1280
+  height: 720
+  # Burn the track title onto the thumbnail (the video background stays clean).
+  thumbnail_text: true
+  thumbnail_font_size: 72
+
+video:
+  width: 1920
+  height: 1080
+  fps: 24
+  # Slow Ken Burns push-in over the artwork.
+  zoom_per_second: 0.012
+  # "showcqt" (frequency bars), "showwaves" (waveform), "none"
+  visualizer: "showcqt"
+  visualizer_height: 220
+  visualizer_opacity: 0.7
+  # Vinyl-crackle-friendly loudness target for YouTube (-14 LUFS).
+  loudnorm: true
+  crf: 20
+  preset: "veryfast"
+  audio_bitrate: "320k"
+  # Optionally also render one long "mix" video containing every track of the batch,
+  # with a timestamped tracklist in its description.
+  render_mix: true
+  mix_gap_seconds: 1.0
+
+metadata:
+  max_title_chars: 95
+  max_tags: 25
+  # Tags appended to every video's tag list.
+  base_tags: ["lofi", "lofi hip hop", "study music", "chillhop", "beats to relax study to"]
+
+llm:
+  # "gemini" (free tier), "groq" (free tier), "offline" (templates, no network)
+  provider: "gemini"
+  # "gemini-flash-latest" tracks the current free-tier flash model; pinned names
+  # such as gemini-2.5-flash are already closed to newly created API keys.
+  gemini_model: "gemini-flash-latest"
+  gemini_image_model: "gemini-2.5-flash-image"
+  groq_model: "llama-3.3-70b-versatile"
+  temperature: 1.0
+
+paths:
+  out: "out"
+  inbox: "inbox"
+  state: "state.json"

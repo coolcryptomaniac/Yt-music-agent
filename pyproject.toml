@@ -1,0 +1,29 @@
+[project]
+name = "yt-music-agent"
+version = "0.1.0"
+description = "Daily batches of upload-ready YouTube music videos from Suno, free LLMs and FFmpeg"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.32",
+    "PyYAML>=6.0",
+    "Pillow>=10.4",
+    "playwright>=1.47",
+]
+
+[project.scripts]
+ytmusic = "ytmusic.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ytmusic*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SLF"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
