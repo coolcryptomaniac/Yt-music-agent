@@ -48,6 +48,28 @@ chain by default. Once billing is enabled on your key, reorder `art.providers` t
 
 ## Install
 
+One command, macOS or Linux — installs ffmpeg, the virtualenv, Playwright's Chromium and
+writes a `.env` stub. Safe to re-run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/coolcryptomaniac/Yt-music-agent/main/scripts/setup.sh | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/coolcryptomaniac/Yt-music-agent/main/scripts/setup.ps1 | iex
+```
+
+Then, daily:
+
+```bash
+./scripts/suno-chrome.sh    # once per reboot: opens the Chrome the agent drives; log into Suno
+./scripts/daily.sh          # YTMUSIC_COUNT=10 ./scripts/daily.sh for a bigger batch
+```
+
+<details><summary>Manual install</summary>
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -56,7 +78,10 @@ sudo apt-get install -y ffmpeg   # ffmpeg + ffprobe must be on PATH
 python -m ytmusic doctor         # verifies binaries and API keys
 ```
 
-Keys are read from the environment:
+</details>
+
+Keys are read from the environment (or a `.env` file next to the repo, which
+`scripts/daily.sh` sources automatically):
 
 ```bash
 export GEMINI_API_KEY=...     # https://aistudio.google.com/apikey  (free)
