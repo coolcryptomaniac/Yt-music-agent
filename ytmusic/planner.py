@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +78,15 @@ def remember_titles(state_path: Path, titles: list[str]) -> None:
     state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
+def _tag_list(raw: Any) -> list[str]:
+    """Models answer with either a list or a comma-separated string."""
+    if isinstance(raw, str):
+        return raw.split(",")
+    if isinstance(raw, list):
+        return [str(item) for item in raw]
+    return []
+
+
 def _coerce_plan(index: int, raw: dict[str, Any], instrumental: bool, config: Config) -> TrackPlan:
     title = str(raw.get("title") or f"Untitled {index}").strip()
     max_title = int(config.get("metadata.max_title_chars", 95))
@@ -86,7 +94,7 @@ def _coerce_plan(index: int, raw: dict[str, Any], instrumental: bool, config: Co
     base_tags = [str(tag) for tag in config.get("metadata.base_tags", [])]
 
     tags: list[str] = []
-    for tag in list(raw.get("tags") or []) + base_tags:
+    for tag in _tag_list(raw.get("tags")) + base_tags:
         tag = str(tag).strip().lower()
         if tag and tag not in tags:
             tags.append(tag)
@@ -128,12 +136,10 @@ def build_plans(config: Config, count: int | None = None) -> list[TrackPlan]:
         LOGGER.info("planning %d tracks with offline templates", count)
         raw_plans = offline_plans(config, count, seed if seed is None else int(seed))
     else:
-        fallback_config = None
-        alternate = "groq" if llm.provider == "gemini" else "gemini"
-        if os.environ.get(f"{alternate.upper()}_API_KEY", "").strip():
-            fallback_config = Config(data=config.data, path=config.path)
-            fallback_config.set("llm.provider", alternate)
-
+        # Try the configured provider first, then every other keyed provider.
+        chain = [llm] + [
+            LLM(config, provider=name) for name in LLM.available_providers() if name != llm.provider
+        ]
         prompt = PROMPT_TEMPLATE.format(
             channel_name=config.get("channel.name", "Music Channel"),
             niche=" ".join(str(config.get("channel.niche", "")).split()),
@@ -155,7 +161,7 @@ def build_plans(config: Config, count: int | None = None) -> list[TrackPlan]:
         )
         LOGGER.info("planning %d tracks with %s", count, llm.provider)
         payload: Any = None
-        for candidate in [llm] + ([LLM(fallback_config)] if fallback_config else []):
+        for candidate in chain:
             try:
                 payload = candidate.json(prompt, system=SYSTEM)
                 break

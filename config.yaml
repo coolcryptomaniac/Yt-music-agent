@@ -29,7 +29,11 @@ music:
   # "inbox" -> pick up audio files you rendered yourself from ./inbox
   # "synth" -> ffmpeg-generated placeholder pads (offline smoke-testing only)
   provider: "suno"
-  # Suno "Custom" mode fields are generated per track by the LLM.
+  # How to drive suno.com:
+  #   "auto"   -> try the per-field custom form, fall back to the single prompt box
+  #   "custom" -> require the per-field form (style / lyrics / title)
+  #   "simple" -> always use the one-box "Chat to make music" prompt
+  suno_mode: "auto"
   instrumental: true
   # Paid plans allow wav; "mp3" is smaller and fine for YouTube (which re-encodes anyway).
   download_format: "mp3"
@@ -37,6 +41,15 @@ music:
   min_duration: 90
   # Suno returns 2 variants per generation; keep the longest or the first.
   variant_pick: "longest"
+
+suno:
+  cdp_endpoint: "http://localhost:29229"
+  # Suno protects "Create" with Cloudflare Turnstile. On a normal home connection it
+  # passes silently; on datacenter/VPN IPs it shows a checkbox that has to be clicked.
+  # The agent pauses this long for it to be cleared before giving up.
+  human_check_timeout: 180
+  # Selector overrides, e.g. create_button: ['button[aria-label="Create song"]'].
+  selectors: {}
 
 art:
   # Order matters: first provider that works wins, the rest are fallbacks.
@@ -80,13 +93,17 @@ metadata:
   base_tags: ["lofi", "lofi hip hop", "study music", "chillhop", "beats to relax study to"]
 
 llm:
-  # "gemini" (free tier), "groq" (free tier), "offline" (templates, no network)
+  # "gemini", "cerebras", "groq" (all free tiers) or "offline" (templates, no network).
+  # If the chosen provider has no key or keeps failing, the others are tried in the
+  # order gemini -> cerebras -> groq, then offline templates.
   provider: "gemini"
   # "gemini-flash-latest" tracks the current free-tier flash model; pinned names
   # such as gemini-2.5-flash are already closed to newly created API keys.
   gemini_model: "gemini-flash-latest"
   gemini_image_model: "gemini-2.5-flash-image"
   groq_model: "llama-3.3-70b-versatile"
+  # Cerebras rotates its catalogue; check GET https://api.cerebras.ai/v1/models if this 404s.
+  cerebras_model: "gpt-oss-120b"
   temperature: 1.0
 
 paths:

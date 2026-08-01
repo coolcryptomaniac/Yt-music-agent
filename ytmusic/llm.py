@@ -1,9 +1,13 @@
 """Text generation across free LLM tiers, with an offline template fallback.
 
-Providers, in order of quality:
-  * gemini  - Google AI Studio free tier (GEMINI_API_KEY), generous daily quota.
-  * groq    - Groq free tier (GROQ_API_KEY), very fast Llama 3.3 70B.
+Providers:
+  * gemini   - Google AI Studio free tier (GEMINI_API_KEY), strongest copywriting.
+  * cerebras - Cerebras Cloud free tier (CEREBRAS_API_KEY), by far the fastest.
+  * groq     - Groq free tier (GROQ_API_KEY), fast, generous limits.
   * offline  - deterministic templates, no network, no keys. Always available.
+
+When the configured provider has no key, or fails after retries, the planner walks the
+remaining keyed providers before finally dropping to offline templates.
 """
 
 from __future__ import annotations
@@ -23,7 +27,18 @@ from .config import Config
 LOGGER = logging.getLogger(__name__)
 
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
+# Groq and Cerebras are both OpenAI-chat-compatible, so they share one code path.
+OPENAI_COMPATIBLE = {
+    "groq": ("https://api.groq.com/openai/v1/chat/completions", "llm.groq_model"),
+    "cerebras": ("https://api.cerebras.ai/v1/chat/completions", "llm.cerebras_model"),
+}
+KEY_ENV = {
+    "gemini": "GEMINI_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "cerebras": "CEREBRAS_API_KEY",
+}
+# Preference order used when the configured provider is unusable.
+PROVIDER_ORDER = ("gemini", "cerebras", "groq")
 TIMEOUT = 120
 RETRY_STATUSES = {429, 500, 502, 503, 504}
 MAX_ATTEMPTS = 3
@@ -56,32 +71,39 @@ def _extract_json(text: str) -> Any:
 class LLM:
     """Thin wrapper exposing a single `json_list` call used by the planner."""
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, provider: str | None = None) -> None:
         self.config = config
-        self.provider = str(config.get("llm.provider", "gemini")).lower()
         self.temperature = float(config.get("llm.temperature", 1.0))
-        self.gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-        self.groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-        self.provider = self._resolve_provider()
+        requested = str(provider or config.get("llm.provider", "gemini")).lower()
+        self.provider = self._resolve_provider(requested)
 
-    def _resolve_provider(self) -> str:
-        if self.provider == "gemini" and not self.gemini_key:
-            if self.groq_key:
-                LOGGER.warning("GEMINI_API_KEY missing, falling back to groq")
-                return "groq"
-            LOGGER.warning("GEMINI_API_KEY missing, falling back to offline templates")
-            return "offline"
-        if self.provider == "groq" and not self.groq_key:
-            if self.gemini_key:
-                LOGGER.warning("GROQ_API_KEY missing, falling back to gemini")
-                return "gemini"
-            LOGGER.warning("GROQ_API_KEY missing, falling back to offline templates")
-            return "offline"
-        return self.provider
+    @staticmethod
+    def key_for(provider: str) -> str:
+        return os.environ.get(KEY_ENV.get(provider, ""), "").strip()
+
+    @classmethod
+    def available_providers(cls) -> list[str]:
+        return [name for name in PROVIDER_ORDER if cls.key_for(name)]
+
+    def _resolve_provider(self, requested: str) -> str:
+        if requested == "offline" or self.key_for(requested):
+            return requested
+        alternatives = self.available_providers()
+        if alternatives:
+            LOGGER.warning(
+                "%s missing, using %s instead", KEY_ENV.get(requested, requested), alternatives[0]
+            )
+            return alternatives[0]
+        LOGGER.warning("no LLM API keys found, using offline templates")
+        return "offline"
 
     @property
     def offline(self) -> bool:
         return self.provider == "offline"
+
+    @property
+    def key(self) -> str:
+        return self.key_for(self.provider)
 
     def text(self, prompt: str, system: str | None = None) -> str:
         """Generate text, retrying transient rate limits and 5xx responses with backoff."""
@@ -90,8 +112,8 @@ class LLM:
             try:
                 if self.provider == "gemini":
                     return self._gemini_text(prompt, system)
-                if self.provider == "groq":
-                    return self._groq_text(prompt, system)
+                if self.provider in OPENAI_COMPATIBLE:
+                    return self._openai_compatible_text(prompt, system)
                 raise LLMError("offline provider cannot generate free-form text")
             except (LLMError, requests.RequestException) as exc:
                 last = exc
@@ -124,7 +146,7 @@ class LLM:
             payload["systemInstruction"] = {"parts": [{"text": system}]}
         response = requests.post(
             GEMINI_ENDPOINT.format(model=model),
-            params={"key": self.gemini_key},
+            params={"key": self.key},
             json=payload,
             timeout=TIMEOUT,
         )
@@ -139,16 +161,17 @@ class LLM:
         parts = candidates[0].get("content", {}).get("parts") or []
         return "".join(part.get("text", "") for part in parts)
 
-    def _groq_text(self, prompt: str, system: str | None) -> str:
+    def _openai_compatible_text(self, prompt: str, system: str | None) -> str:
+        endpoint, model_key = OPENAI_COMPATIBLE[self.provider]
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
         response = requests.post(
-            GROQ_ENDPOINT,
-            headers={"Authorization": f"Bearer {self.groq_key}"},
+            endpoint,
+            headers={"Authorization": f"Bearer {self.key}"},
             json={
-                "model": str(self.config.get("llm.groq_model", "llama-3.3-70b-versatile")),
+                "model": str(self.config.require(model_key)),
                 "messages": messages,
                 "temperature": self.temperature,
             },
@@ -156,7 +179,7 @@ class LLM:
         )
         if response.status_code != 200:
             raise LLMError(
-                f"groq {response.status_code}: {response.text[:400]}",
+                f"{self.provider} {response.status_code}: {response.text[:400]}",
                 retryable=response.status_code in RETRY_STATUSES,
             )
         return response.json()["choices"][0]["message"]["content"]

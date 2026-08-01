@@ -36,12 +36,26 @@ _AUDIO_KEYS = ("audio_url", "audioUrl")
 _ID_KEYS = ("id", "clip_id")
 
 DEFAULT_SELECTORS: dict[str, list[str]] = {
+    # Suno's 2026 UI opens on a single "Chat to make music" box; the per-field custom
+    # form is behind "Advanced". Both layouts are supported, see `submit()`.
+    "simple_prompt": [
+        'textarea[placeholder="Chat to make music"]',
+        'textarea[placeholder*="make music" i]',
+        'textarea[placeholder*="song about" i]',
+        'textarea[placeholder*="describe" i]',
+    ],
+    "advanced_toggle": [
+        'button[aria-label="Advanced"]',
+        'button:has-text("Advanced")',
+        '[role="button"]:has-text("Advanced")',
+    ],
     "custom_toggle": [
         'button:has-text("Custom")',
         '[role="tab"]:has-text("Custom")',
         'text="Custom Mode"',
     ],
     "instrumental_toggle": [
+        '[aria-label="Lyrics mode"] button:has-text("Instrumental")',
         'button:has-text("Instrumental")',
         'label:has-text("Instrumental")',
         '[data-testid="instrumental-toggle"]',
@@ -51,18 +65,24 @@ DEFAULT_SELECTORS: dict[str, list[str]] = {
         'textarea[placeholder*="genre" i]',
         'div[contenteditable="true"][data-placeholder*="style" i]',
         'textarea[data-testid="tag-input-textarea"]',
+        # 2026 advanced form: the Styles box is the only textarea on the create panel,
+        # and its placeholder rotates through random style suggestions.
+        "textarea",
     ],
     "lyrics_input": [
+        '[aria-label="Lyrics editor"][contenteditable="true"]',
         'textarea[placeholder*="lyric" i]',
         'textarea[data-testid="lyrics-input-textarea"]',
         'div[contenteditable="true"][data-placeholder*="lyric" i]',
     ],
     "title_input": [
+        'input[placeholder*="Song Title" i]',
         'input[placeholder*="title" i]',
         'textarea[placeholder*="title" i]',
         '[data-testid="title-input"]',
     ],
     "create_button": [
+        'button[aria-label="Create song"]',
         'button:has-text("Create")',
         'button[data-testid="create-button"]',
         'button:has-text("Generate")',
@@ -70,8 +90,20 @@ DEFAULT_SELECTORS: dict[str, list[str]] = {
 }
 
 
+# Suno gates "Create" behind a Cloudflare Turnstile widget. It solves itself silently on
+# a residential IP, but datacenter/VM addresses get the interactive checkbox instead.
+CHALLENGE_SELECTORS = (
+    'iframe[src*="challenges.cloudflare.com"]',
+    'iframe[title*="challenge" i]',
+)
+
+
 class SunoError(RuntimeError):
     pass
+
+
+class SunoChallengeError(SunoError):
+    """Cloudflare asked for human verification and it was never cleared."""
 
 
 def _selectors(config: Config, name: str) -> list[str]:
@@ -122,6 +154,8 @@ class SunoSession:
         self._browser: Any = None
         self._context: Any = None
         self.page: Any = None
+        # "custom" = per-field form, "simple" = single chat prompt box.
+        self.mode = "custom"
         self._clips: dict[str, dict[str, str]] = {}
 
     def __enter__(self) -> SunoSession:
@@ -219,34 +253,113 @@ class SunoSession:
         if not self.page.url.startswith(CREATE_URL):
             self.page.goto(CREATE_URL, wait_until="domcontentloaded", timeout=90000)
         self.page.wait_for_timeout(2000)
+
+        mode = str(self.config.get("music.suno_mode", "auto")).lower()
+        if mode == "simple":
+            self.mode = "simple"
+            return
+
+        # Reveal the per-field form: newer builds hide it behind "Advanced", older ones
+        # behind a "Custom" tab.
+        for toggle in ("advanced_toggle", "custom_toggle"):
+            try:
+                self._first(toggle, timeout=4000).click()
+                self.page.wait_for_timeout(1200)
+                break
+            except SunoError:
+                continue
         try:
-            self._first("custom_toggle", timeout=5000).click()
-            self.page.wait_for_timeout(800)
+            self._first("style_input", timeout=4000)
+            self.mode = "custom"
         except SunoError:
-            LOGGER.info("custom mode toggle not found; assuming custom mode is already active")
+            if mode == "custom":
+                raise
+            LOGGER.warning("custom style field not found; falling back to the simple prompt box")
+            self.mode = "simple"
+
+    def _expand_more_options(self) -> None:
+        """The instrumental switch and title field live in a collapsed section."""
+        assert self.page is not None
+        try:
+            section = self.page.get_by_text("More Options").first
+            section.scroll_into_view_if_needed()
+            if section.get_attribute("aria-expanded") != "true":
+                section.click()
+                self.page.wait_for_timeout(800)
+        except Exception:  # noqa: BLE001 - section is optional in older layouts
+            LOGGER.debug("More Options section not present")
+
+    def simple_prompt(self, plan: TrackPlan) -> str:
+        """One-box prompt used when the per-field form is unavailable."""
+        parts = [plan.suno_style.rstrip(". ")]
+        if plan.instrumental:
+            parts.append("fully instrumental, no vocals, no lyrics")
+        parts.append(f'title it "{plan.title}"')
+        return ". ".join(parts)
 
     def submit(self, plan: TrackPlan) -> None:
         """Fill the create form and hit Create."""
         assert self.page is not None
 
-        if plan.instrumental:
-            try:
-                self._first("instrumental_toggle", timeout=4000).click()
-                self.page.wait_for_timeout(500)
-            except SunoError:
-                LOGGER.info("instrumental toggle not found; relying on prompt wording")
+        if self.mode == "simple":
+            self._fill("simple_prompt", self.simple_prompt(plan))
         else:
-            self._fill("lyrics_input", plan.suno_lyrics)
+            self._expand_more_options()
+            if plan.instrumental:
+                try:
+                    toggle = self._first("instrumental_toggle", timeout=4000)
+                    toggle.scroll_into_view_if_needed()
+                    toggle.click()
+                    self.page.wait_for_timeout(500)
+                except SunoError:
+                    LOGGER.info("instrumental toggle not found; relying on prompt wording")
+            else:
+                self._fill("lyrics_input", plan.suno_lyrics)
 
-        self._fill("style_input", plan.suno_style)
-        try:
-            self._fill("title_input", plan.title)
-        except SunoError:
-            LOGGER.info("title field not found; Suno will auto-name the clip")
+            self._fill("style_input", plan.suno_style)
+            try:
+                self._fill("title_input", plan.title)
+            except SunoError:
+                LOGGER.info("title field not found; Suno will auto-name the clip")
 
         self._first("create_button").click()
-        LOGGER.info("track %02d: submitted to Suno", plan.index)
+        LOGGER.info("track %02d: submitted to Suno (%s mode)", plan.index, self.mode)
         self.page.wait_for_timeout(4000)
+        self.wait_for_human_check()
+
+    def wait_for_human_check(self, timeout: float | None = None) -> None:
+        """Block while a Cloudflare challenge is on screen so a human can clear it."""
+        assert self.page is not None
+        if timeout is None:
+            timeout = float(self.config.get("suno.human_check_timeout", 180))
+        if not self._challenge_visible():
+            return
+        LOGGER.warning(
+            "Cloudflare human verification is showing - solve it in the browser "
+            "(waiting up to %.0fs)",
+            timeout,
+        )
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            self.page.wait_for_timeout(3000)
+            if not self._challenge_visible():
+                LOGGER.info("human verification cleared")
+                return
+        raise SunoChallengeError(
+            "Cloudflare human verification was not cleared. Suno's Turnstile widget "
+            "usually loops forever on datacenter/VPN IPs - run the agent from the "
+            "machine you normally browse Suno on, or use --music inbox."
+        )
+
+    def _challenge_visible(self) -> bool:
+        assert self.page is not None
+        for selector in CHALLENGE_SELECTORS:
+            try:
+                if self.page.locator(selector).first.is_visible(timeout=1500):
+                    return True
+            except Exception:  # noqa: BLE001 - selector simply absent
+                continue
+        return False
 
     def wait_for_audio(
         self, exclude: Iterable[str], timeout: float = 420.0

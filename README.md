@@ -29,7 +29,7 @@ out/2026-07-30/
 
 | Stage | Tool | Cost | Notes |
 | ----- | ---- | ---- | ----- |
-| Ideas, lyrics, Suno prompts, titles, descriptions, tags | Gemini `gemini-flash-latest`, or Groq Llama 3.3 70B | free tier | offline template fallback needs no key at all |
+| Ideas, lyrics, Suno prompts, titles, descriptions, tags | Gemini `gemini-flash-latest`, Cerebras or Groq Llama 3.3 70B | free tier | tried in that order; offline template fallback needs no key at all |
 | Music | Suno, browser-driven | your existing plan | no public API exists; paid plan also gives commercial-use rights |
 | Cover art | Pollinations (Flux) → Nano Banana → local Pillow renderer | free | first provider that answers wins |
 | Video | FFmpeg | free | unlimited length, no quota, no watermark |
@@ -48,6 +48,28 @@ chain by default. Once billing is enabled on your key, reorder `art.providers` t
 
 ## Install
 
+One command, macOS or Linux — installs ffmpeg, the virtualenv, Playwright's Chromium and
+writes a `.env` stub. Safe to re-run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/coolcryptomaniac/Yt-music-agent/main/scripts/setup.sh | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/coolcryptomaniac/Yt-music-agent/main/scripts/setup.ps1 | iex
+```
+
+Then, daily:
+
+```bash
+./scripts/suno-chrome.sh    # once per reboot: opens the Chrome the agent drives; log into Suno
+./scripts/daily.sh          # YTMUSIC_COUNT=10 ./scripts/daily.sh for a bigger batch
+```
+
+<details><summary>Manual install</summary>
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -56,14 +78,20 @@ sudo apt-get install -y ffmpeg   # ffmpeg + ffprobe must be on PATH
 python -m ytmusic doctor         # verifies binaries and API keys
 ```
 
-Keys are read from the environment:
+</details>
+
+Keys are read from the environment (or a `.env` file next to the repo, which
+`scripts/daily.sh` sources automatically):
 
 ```bash
-export GEMINI_API_KEY=...   # https://aistudio.google.com/apikey  (free)
-export GROQ_API_KEY=...     # https://console.groq.com/keys       (free, fallback)
+export GEMINI_API_KEY=...     # https://aistudio.google.com/apikey  (free)
+export CEREBRAS_API_KEY=...   # https://cloud.cerebras.ai           (free, fastest)
+export GROQ_API_KEY=...       # https://console.groq.com/keys       (free)
 ```
 
-Neither is mandatory: with no keys the planner falls back to built-in templates.
+None are mandatory: with no keys the planner falls back to built-in templates. With
+several, the others act as automatic failover when one is rate-limited or down
+(both happen regularly on free tiers).
 
 ## Suno login
 
@@ -78,6 +106,24 @@ python -m ytmusic login                          # confirms the session is live
 Set `suno.cdp_endpoint` in `config.yaml` if you use a different port. With no debuggable
 Chrome available, the agent launches its own persistent profile
 (`~/.config/yt-music-agent/chrome`) — log in there once and it is remembered.
+
+### Run the Suno stage from your own machine
+
+Pressing **Create** triggers a Cloudflare Turnstile check. On a normal home connection it
+passes invisibly; on a cloud VM, VPN or datacenter IP it shows the "Verify you are human"
+checkbox and — verified on a Devin VM — keeps re-issuing the challenge no matter how many
+times it is clicked, by hand or otherwise. That is an IP-reputation gate, not something the
+selectors can work around, so run `--music suno` on the computer you normally browse Suno
+on. The agent pauses up to `suno.human_check_timeout` seconds for a challenge to be cleared
+before failing with a clear error.
+
+Cloud/CI hosts should use the two-step split instead:
+
+```bash
+python -m ytmusic plan -n 6                # prompts -> suno_prompts.txt, paste into suno.com
+# drop the downloaded mp3/wav files into ./inbox
+python -m ytmusic run -n 6 --music inbox   # art, video, thumbnails, metadata
+```
 
 ## Daily use
 
