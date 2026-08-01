@@ -82,6 +82,24 @@ Set `suno.cdp_endpoint` in `config.yaml` if you use a different port. With no de
 Chrome available, the agent launches its own persistent profile
 (`~/.config/yt-music-agent/chrome`) — log in there once and it is remembered.
 
+### Run the Suno stage from your own machine
+
+Pressing **Create** triggers a Cloudflare Turnstile check. On a normal home connection it
+passes invisibly; on a cloud VM, VPN or datacenter IP it shows the "Verify you are human"
+checkbox and — verified on a Devin VM — keeps re-issuing the challenge no matter how many
+times it is clicked, by hand or otherwise. That is an IP-reputation gate, not something the
+selectors can work around, so run `--music suno` on the computer you normally browse Suno
+on. The agent pauses up to `suno.human_check_timeout` seconds for a challenge to be cleared
+before failing with a clear error.
+
+Cloud/CI hosts should use the two-step split instead:
+
+```bash
+python -m ytmusic plan -n 6                # prompts -> suno_prompts.txt, paste into suno.com
+# drop the downloaded mp3/wav files into ./inbox
+python -m ytmusic run -n 6 --music inbox   # art, video, thumbnails, metadata
+```
+
 ## Daily use
 
 ```bash
