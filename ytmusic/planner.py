@@ -78,6 +78,15 @@ def remember_titles(state_path: Path, titles: list[str]) -> None:
     state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
+def _tag_list(raw: Any) -> list[str]:
+    """Models answer with either a list or a comma-separated string."""
+    if isinstance(raw, str):
+        return raw.split(",")
+    if isinstance(raw, list):
+        return [str(item) for item in raw]
+    return []
+
+
 def _coerce_plan(index: int, raw: dict[str, Any], instrumental: bool, config: Config) -> TrackPlan:
     title = str(raw.get("title") or f"Untitled {index}").strip()
     max_title = int(config.get("metadata.max_title_chars", 95))
@@ -85,7 +94,7 @@ def _coerce_plan(index: int, raw: dict[str, Any], instrumental: bool, config: Co
     base_tags = [str(tag) for tag in config.get("metadata.base_tags", [])]
 
     tags: list[str] = []
-    for tag in list(raw.get("tags") or []) + base_tags:
+    for tag in _tag_list(raw.get("tags")) + base_tags:
         tag = str(tag).strip().lower()
         if tag and tag not in tags:
             tags.append(tag)

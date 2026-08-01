@@ -102,7 +102,8 @@ llm:
   gemini_model: "gemini-flash-latest"
   gemini_image_model: "gemini-2.5-flash-image"
   groq_model: "llama-3.3-70b-versatile"
-  cerebras_model: "llama-3.3-70b"
+  # Cerebras rotates its catalogue; check GET https://api.cerebras.ai/v1/models if this 404s.
+  cerebras_model: "gpt-oss-120b"
   temperature: 1.0
 
 paths:
