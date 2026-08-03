@@ -2,21 +2,35 @@
 # Everything here is overridable per-run via CLI flags (see `python -m ytmusic --help`).
 
 channel:
-  name: "Lofi Drift"
+  name: "Mohit Pandey"
+  # Printed on every thumbnail under "ARTIST".
+  artist: "Mohit Pandey"
   # Free-text niche description. This is the single most important knob: it steers
   # ideas, lyrics, style prompts, artwork and metadata.
   niche: >
-    Cozy late-night lofi hip hop and chillhop for studying, coding and sleeping.
-    Warm tape saturation, dusty vinyl crackle, mellow jazz chords, soft rain.
-  language: "English"
+    Cinematic AI Hindi music: romantic Bollywood-style originals, modern EDM/lofi
+    reimaginings of classic film songs, and long meditative raga instrumentals.
+    Emotional, rain-soaked, night-city visuals.
+  language: "Hindi (Devanagari) for on-screen text, English for YouTube metadata"
   # Appended verbatim to every description.
   cta: |
     ---
-    New tracks every day. Subscribe for more late-night study beats.
+    New AI music every day. Subscribe and turn on the bell.
   # Applied to every description; keep your real business/legal text here.
   legal: |
-    Music generated with Suno under a commercial-use plan.
-    Artwork AI-generated. All rights to this upload belong to the channel.
+    Music and artwork are AI-generated for this channel.
+    Covers/remixes are for entertainment only; all rights to the original
+    compositions and lyrics belong to their respective copyright holders.
+
+content:
+  # Cycled across the batch. "original" = own song, "cover" = reimagined classic
+  # (credits + disclaimer are added), "instrumental" = long raga/meditation piece.
+  mix: ["original", "original", "instrumental", "cover"]
+  # "devanagari" writes the big thumbnail title and tagline in Hindi script.
+  script: "devanagari"
+  disclaimer: >-
+    This cover is made for entertainment purposes only.
+    All rights belong to the original copyright holders.
 
 batch:
   # How many videos to produce per run. 5-10 recommended for a daily upload cadence.
@@ -28,13 +42,16 @@ music:
   # "suno"  -> drive suno.com in a real browser (needs a logged-in Chrome, see README)
   # "inbox" -> pick up audio files you rendered yourself from ./inbox
   # "synth" -> ffmpeg-generated placeholder pads (offline smoke-testing only)
+  # "acestep" -> open-source ACE-Step model, no browser/login (needs a GPU; see
+  #              notebooks/ytmusic_colab.ipynb for a free one)
   provider: "suno"
   # How to drive suno.com:
   #   "auto"   -> try the per-field custom form, fall back to the single prompt box
   #   "custom" -> require the per-field form (style / lyrics / title)
   #   "simple" -> always use the one-box "Chat to make music" prompt
   suno_mode: "auto"
-  instrumental: true
+  # Vocal songs need this false; "instrumental" content-type tracks force it on anyway.
+  instrumental: false
   # Paid plans allow wav; "mp3" is smaller and fine for YouTube (which re-encodes anyway).
   download_format: "mp3"
   # Seconds. Tracks shorter than this are rejected and regenerated.
@@ -65,6 +82,16 @@ art:
   # Burn the track title onto the thumbnail (the video background stays clean).
   thumbnail_text: true
   thumbnail_font_size: 72
+  # "simple"    -> title + genre strap over the artwork
+  # "cinematic" -> channel-style layout: badges, oversized title, tagline, artist
+  #                line, feature chips, plus credits/disclaimer on covers
+  thumbnail_style: "cinematic"
+  accent_color: "#F2C879"
+  title_color: "#F8EEDC"
+  quality_badge: "4K ULTRA HD"
+  chips: ["FEEL IT", "LOVE IT", "LIVE IT"]
+  # 0-255: how hard the left column is darkened so the type stays readable.
+  scrim: 205
 
 video:
   width: 1920
@@ -72,8 +99,9 @@ video:
   fps: 24
   # Slow Ken Burns push-in over the artwork.
   zoom_per_second: 0.012
-  # "showcqt" (frequency bars), "showwaves" (waveform), "none"
-  visualizer: "showcqt"
+  # Channel-style videos are a still frame with a slow push-in; set "showcqt"
+  # (frequency bars) or "showwaves" if you want a reactive overlay instead.
+  visualizer: "none"
   visualizer_height: 220
   visualizer_opacity: 0.7
   # Vinyl-crackle-friendly loudness target for YouTube (-14 LUFS).
@@ -90,7 +118,7 @@ metadata:
   max_title_chars: 95
   max_tags: 25
   # Tags appended to every video's tag list.
-  base_tags: ["lofi", "lofi hip hop", "study music", "chillhop", "beats to relax study to"]
+  base_tags: ["ai music", "hindi song", "bollywood lofi", "romantic song", "ai generated music"]
 
 llm:
   # "gemini", "cerebras", "groq" (all free tiers) or "offline" (templates, no network).
@@ -105,6 +133,20 @@ llm:
   # Cerebras rotates its catalogue; check GET https://api.cerebras.ai/v1/models if this 404s.
   cerebras_model: "gpt-oss-120b"
   temperature: 1.0
+
+acestep:
+  # Left null the weights download to ~/.cache/ace-step/checkpoints on first use.
+  checkpoint_dir: null
+  duration: 150
+  infer_step: 60
+  guidance_scale: 15.0
+  scheduler: "euler"
+  dtype: "bfloat16"
+  format: "wav"
+  # Enable on <12GB GPUs; slower but fits.
+  cpu_offload: false
+  torch_compile: false
+  overlapped_decode: false
 
 paths:
   out: "out"

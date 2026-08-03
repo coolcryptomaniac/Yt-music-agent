@@ -30,8 +30,16 @@ Language for all copy: {language}
 Design {count} DISTINCT tracks for today's upload batch.
 Avoid any of these already-used titles: {used_titles}
 
+Use exactly this content type per track (index: type): {type_plan}
+{type_rules}
+
 For each track return an object with exactly these keys:
-- "title": short evocative track name, 2-4 words, no quotes, no emoji
+- "content_type": the type assigned to that index above
+- "title": short evocative track name, 2-4 words, ASCII latin script, no quotes, no emoji
+- "title_display": the title as it should appear huge on the thumbnail{script_rule}
+- "tagline": one short line under the title, max 45 characters{script_rule}
+- "badge": 2-4 word uppercase kicker above the title, e.g. "AI EDM TRANCE REMIX"
+  or "8 MINUTE INSTRUMENTAL"
 - "mood": one or two words
 - "genre": specific sub-genre
 - "bpm": integer between 60 and 100
@@ -50,6 +58,32 @@ For each track return an object with exactly these keys:
 
 Return a JSON array of {count} objects. No prose, no markdown.
 """
+
+TYPE_RULES = {
+    "original": (
+        'For "original" tracks: an original song, not based on any existing recording. '
+        "Write your own lyrics."
+    ),
+    "cover": (
+        'For "cover" tracks: pick a well-known classic film song and reimagine it in a '
+        'modern style (EDM trance, lofi, retro disco, reggae). Set "title" and '
+        '"title_display" to the original song name, and add a "credits" object with the '
+        'keys "Song", "Movie", "Singer", "Music", "Lyricist". Leave "suno_lyrics" empty '
+        "- the operator pastes the original lyrics into Suno by hand."
+    ),
+    "instrumental": (
+        'For "instrumental" tracks: a long (6-10 minute) meditative instrumental piece - '
+        "raga, flute, ambient, rain. No vocals, no lyrics. Give it a curiosity-driven "
+        'youtube_title and a "badge" stating the length.'
+    ),
+}
+
+
+def content_types(config: Config, count: int) -> list[str]:
+    """Cycle the configured content mix across the batch."""
+    mix = [str(item).lower() for item in config.get("content.mix", ["original"]) or ["original"]]
+    mix = [item for item in mix if item in TYPE_RULES] or ["original"]
+    return [mix[i % len(mix)] for i in range(count)]
 
 
 def _used_titles(state_path: Path, limit: int = 120) -> list[str]:
@@ -87,7 +121,7 @@ def _tag_list(raw: Any) -> list[str]:
     return []
 
 
-def _coerce_plan(index: int, raw: dict[str, Any], instrumental: bool, config: Config) -> TrackPlan:
+def _coerce_plan(index: int, raw: dict[str, Any], instrumental: bool, config: Config) -> TrackPlan:  # noqa: C901
     title = str(raw.get("title") or f"Untitled {index}").strip()
     max_title = int(config.get("metadata.max_title_chars", 95))
     max_tags = int(config.get("metadata.max_tags", 25))
@@ -100,7 +134,20 @@ def _coerce_plan(index: int, raw: dict[str, Any], instrumental: bool, config: Co
             tags.append(tag)
 
     youtube_title = str(raw.get("youtube_title") or title).strip()[:max_title]
+    content_type = str(raw.get("content_type") or "original").strip().lower()
+    if content_type not in TYPE_RULES:
+        content_type = "original"
+    if content_type == "instrumental":
+        instrumental = True
     lyrics = "" if instrumental else str(raw.get("suno_lyrics") or "").strip()
+
+    credits_raw = raw.get("credits")
+    credits = (
+        {str(k): str(v) for k, v in credits_raw.items()} if isinstance(credits_raw, dict) else {}
+    )
+    disclaimer = (
+        str(config.get("content.disclaimer", "")).strip() if content_type == "cover" else ""
+    )
 
     try:
         bpm = int(raw.get("bpm") or 75)
@@ -117,6 +164,12 @@ def _coerce_plan(index: int, raw: dict[str, Any], instrumental: bool, config: Co
         suno_lyrics=lyrics,
         instrumental=instrumental,
         art_prompt=str(raw.get("art_prompt") or "").strip(),
+        title_display=str(raw.get("title_display") or title).strip(),
+        tagline=str(raw.get("tagline") or "").strip(),
+        badge=str(raw.get("badge") or "").strip(),
+        content_type=content_type,
+        credits=credits,
+        disclaimer=disclaimer,
         youtube_title=youtube_title,
         description=str(raw.get("description") or "").strip(),
         tags=tags[:max_tags],
@@ -140,7 +193,12 @@ def build_plans(config: Config, count: int | None = None) -> list[TrackPlan]:
         chain = [llm] + [
             LLM(config, provider=name) for name in LLM.available_providers() if name != llm.provider
         ]
+        types = content_types(config, count)
+        script = str(config.get("content.script", "latin")).lower()
         prompt = PROMPT_TEMPLATE.format(
+            type_plan=", ".join(f"{i}={t}" for i, t in enumerate(types, start=1)),
+            type_rules="\n".join(TYPE_RULES[t] for t in dict.fromkeys(types)),
+            script_rule=(" (write it in Devanagari script)" if script == "devanagari" else ""),
             channel_name=config.get("channel.name", "Music Channel"),
             niche=" ".join(str(config.get("channel.niche", "")).split()),
             language=config.get("channel.language", "English"),

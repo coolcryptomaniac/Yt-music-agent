@@ -410,6 +410,13 @@ class SunoSession:
             return None
 
 
+def _lyrics_hint(plan: TrackPlan) -> str:
+    if plan.content_type == "cover":
+        song = plan.credits.get("Song", plan.title)
+        return f"(paste the original lyrics of \u201c{song}\u201d here before generating)"
+    return "(instrumental - enable the Instrumental toggle)"
+
+
 def write_manual_prompts(plans: list[TrackPlan], destination: Path) -> Path:
     """Copy-paste sheet so a failed automation run is still usable by hand."""
     blocks: list[str] = []
@@ -426,7 +433,7 @@ def write_manual_prompts(plans: list[TrackPlan], destination: Path) -> Path:
                     plan.title,
                     "",
                     "[Lyrics]",
-                    plan.suno_lyrics or "(instrumental - enable the Instrumental toggle)",
+                    plan.suno_lyrics or _lyrics_hint(plan),
                     "",
                 ]
             )
