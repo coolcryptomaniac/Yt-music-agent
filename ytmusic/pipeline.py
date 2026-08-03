@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 
+from . import acestep
 from . import art as art_mod
 from . import audio as audio_mod
 from . import metadata as meta_mod
@@ -60,6 +61,18 @@ def acquire_audio(
 
     if provider == "synth":
         return audio_mod.synth_placeholder(plan, target)
+
+    if provider == "acestep":
+        try:
+            audio_path = acestep.generate(config, plan, target)
+        except acestep.AceStepError as exc:
+            LOGGER.warning("track %02d: acestep failed: %s", plan.index, exc)
+            notes.append(f"acestep failed: {exc}")
+            return None
+        duration = audio_mod.probe_duration(audio_path)
+        if duration < min_duration:
+            notes.append(f"short track ({duration:.0f}s < {min_duration:.0f}s)")
+        return audio_path
 
     if provider == "inbox":
         claimed = audio_mod.take_from_inbox(config, plan, target)
@@ -115,8 +128,11 @@ def produce_batch(
             artifacts.art = cover
             if used == "local":
                 artifacts.notes.append("cover art used the offline fallback renderer")
+            known_duration = (
+                audio_mod.probe_duration(artifacts.audio) if artifacts.audio is not None else None
+            )
             artifacts.thumbnail = art_mod.make_thumbnail(
-                config, plan, cover, directory / "thumbnail.jpg"
+                config, plan, cover, directory / "thumbnail.jpg", known_duration
             )
 
             if artifacts.audio is not None:

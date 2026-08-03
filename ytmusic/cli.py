@@ -61,7 +61,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-c", "--config", default=None, help="path to config.yaml")
     parser.add_argument("-n", "--count", type=int, default=None, help="tracks in this batch")
     parser.add_argument(
-        "--music", choices=["suno", "inbox", "synth"], default=None, help="audio source"
+        "--music",
+        choices=["suno", "acestep", "inbox", "synth"],
+        default=None,
+        help="audio source",
     )
     parser.add_argument("--llm", choices=["gemini", "cerebras", "groq", "offline"], default=None)
     parser.add_argument("--niche", default=None, help="override the channel niche for this run")

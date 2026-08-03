@@ -31,6 +31,15 @@ class TrackPlan:
     suno_lyrics: str = ""
     instrumental: bool = True
     art_prompt: str = ""
+    # Thumbnail typography. `title_display` may be Devanagari (or any script);
+    # `title` stays ASCII-ish because it is used for folder slugs.
+    title_display: str = ""
+    tagline: str = ""
+    badge: str = ""
+    # original | cover | instrumental - drives prompts, metadata and thumbnail extras.
+    content_type: str = "original"
+    credits: dict[str, str] = field(default_factory=dict)
+    disclaimer: str = ""
     youtube_title: str = ""
     description: str = ""
     tags: list[str] = field(default_factory=list)

@@ -31,6 +31,7 @@ out/2026-07-30/
 | ----- | ---- | ---- | ----- |
 | Ideas, lyrics, Suno prompts, titles, descriptions, tags | Gemini `gemini-flash-latest`, Cerebras or Groq Llama 3.3 70B | free tier | tried in that order; offline template fallback needs no key at all |
 | Music | Suno, browser-driven | your existing plan | no public API exists; paid plan also gives commercial-use rights |
+| Music (cloud, no browser) | ACE-Step 3.5B, Apache-2.0 | free on a Colab GPU | `--music acestep`; great for long instrumentals, weak at Hindi vocals |
 | Cover art | Pollinations (Flux) → Nano Banana → local Pillow renderer | free | first provider that answers wins |
 | Video | FFmpeg | free | unlimited length, no quota, no watermark |
 | Metadata | same LLM | free | written straight into upload-form order |
@@ -45,6 +46,36 @@ generate a Veo clip yourself and drop it in as the background — see *Custom ba
 a keyless-billing project it returns HTTP 429. Pollinations is therefore first in the
 chain by default. Once billing is enabled on your key, reorder `art.providers` to put
 `gemini` first.
+
+## Content types and the cinematic thumbnail
+
+`content.mix` is cycled across the batch, so one run can mix formats:
+
+| Type | What the planner writes | Thumbnail extras |
+| ---- | ----------------------- | ---------------- |
+| `original` | an original song with its own lyrics | – |
+| `cover` | a classic film song reimagined in a modern style; credits are filled in and the Suno sheet tells you to paste the original lyrics yourself | original-song credits box + rights disclaimer bar |
+| `instrumental` | a long (6–10 min) raga / ambient / meditation piece, curiosity-driven title | length badge |
+
+With `art.thumbnail_style: cinematic` every thumbnail is composited to the same
+layout: `AI MUSIC` and quality badges, a kicker, an oversized title (Devanagari
+when `content.script: devanagari`), a tagline, the `channel.artist` line, feature
+chips and a duration pill. Fonts are pulled once from the Google Fonts mirror
+into `~/.cache/yt-music-agent/fonts`; the art prompt is automatically extended to
+keep the subject on the right so the type has room on the left.
+
+Set `art.thumbnail_style: simple` for the plain title-over-art thumbnail.
+
+## Fully automatic in the cloud (ACE-Step + Colab)
+
+`notebooks/ytmusic_colab.ipynb` runs the whole batch on Colab's free T4: installs
+ACE-Step, generates the tracks, renders artwork/thumbnails/videos/metadata and
+zips the output (optionally to Drive). No browser, no login, no Cloudflare.
+
+ACE-Step is Apache-2.0 with open weights, and it is good at instrumental,
+ambient and raga material — but it does not sing Hindi lyrics anywhere near Suno
+quality. The practical split is: vocal songs on Suno from your own machine,
+long instrumentals in Colab.
 
 ## Install
 
