@@ -28,6 +28,23 @@ class AceStepError(RuntimeError):
     pass
 
 
+def _dtype(config: Config) -> str:
+    """bfloat16 where the GPU supports it, float32 otherwise.
+
+    Colab's free T4 is sm_75: bf16 convolutions have no cuDNN engine there and
+    the decoder dies with "GET was unable to find an engine to execute this
+    computation" after the diffusion has already run.
+    """
+    configured = str(config.get("acestep.dtype", "auto")).lower()
+    if configured != "auto":
+        return configured
+    import torch
+
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        return "bfloat16"
+    return "float32"
+
+
 def _pipeline(config: Config) -> Any:
     """Load (once) and return the ACE-Step pipeline."""
     global _PIPELINE
@@ -43,10 +60,11 @@ def _pipeline(config: Config) -> Any:
         ) from exc
 
     checkpoint = config.get("acestep.checkpoint_dir")
-    LOGGER.info("loading ACE-Step (first run downloads ~8GB of weights)")
+    dtype = _dtype(config)
+    LOGGER.info("loading ACE-Step in %s (first run downloads ~8GB of weights)", dtype)
     _PIPELINE = ACEStepPipeline(
         checkpoint_dir=str(checkpoint) if checkpoint else None,
-        dtype=str(config.get("acestep.dtype", "bfloat16")),
+        dtype=dtype,
         torch_compile=bool(config.get("acestep.torch_compile", False)),
         cpu_offload=bool(config.get("acestep.cpu_offload", False)),
         overlapped_decode=bool(config.get("acestep.overlapped_decode", False)),

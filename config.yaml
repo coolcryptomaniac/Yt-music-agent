@@ -141,7 +141,8 @@ acestep:
   infer_step: 60
   guidance_scale: 15.0
   scheduler: "euler"
-  dtype: "bfloat16"
+  # "auto" = bfloat16 on GPUs that support it, float32 elsewhere (e.g. Colab T4).
+  dtype: "auto"
   format: "wav"
   # Enable on <12GB GPUs; slower but fits.
   cpu_offload: false
