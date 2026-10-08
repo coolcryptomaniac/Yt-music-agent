@@ -23,6 +23,7 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from . import thumbnail
 from .config import Config
 from .models import TrackPlan
 
@@ -173,6 +174,13 @@ def generate_cover(config: Config, plan: TrackPlan, destination: Path) -> tuple[
         f"{plan.genre} album cover, {plan.mood} atmosphere, cinematic lighting, "
         "no text, no watermark, no logo"
     )
+    if str(config.get("art.thumbnail_style", "simple")).lower() == "cinematic":
+        # The cinematic layout owns the left half, so ask for the subject on the right.
+        prompt += (
+            ", cinematic photographic still, subject framed in the right third, "
+            "dark empty negative space on the left half, shallow depth of field, "
+            "moody rim lighting, no text, no watermark, no logo"
+        )
     providers: list[str] = [str(p).lower() for p in config.get("art.providers", ["local"])]
 
     image: Image.Image | None = None
@@ -217,8 +225,17 @@ def _wrap(text: str, font, max_width: int, draw: ImageDraw.ImageDraw) -> list[st
     return lines[:3]
 
 
-def make_thumbnail(config: Config, plan: TrackPlan, cover: Path, destination: Path) -> Path:
+def make_thumbnail(
+    config: Config,
+    plan: TrackPlan,
+    cover: Path,
+    destination: Path,
+    duration: float | None = None,
+) -> Path:
     """Composite the title (and mood/bpm strap) over the cover for a 1280x720 thumbnail."""
+    if str(config.get("art.thumbnail_style", "simple")).lower() == "cinematic":
+        return thumbnail.render(config, plan, cover, destination, duration)
+
     image = Image.open(cover).convert("RGB").resize((1280, 720), Image.Resampling.LANCZOS)
     if not bool(config.get("art.thumbnail_text", True)):
         image.save(destination, quality=92)
