@@ -212,9 +212,9 @@ export default {
       const url=new URL(request.url);
       if (url.pathname==='/health' && request.method==='GET') return reply({status:'ok',version:'1.0',automation_every_hours:2,publishing_enabled:env.AUTO_PUBLISH==='true'});
       if (!await authorized(request,env.ADMIN_TOKEN)) return fail('Unauthorized',401);
-      if (url.pathname==='/ingest/payouts' && request.method==='POST') return ingestPayouts(request,env);
-      if (url.pathname==='/ingest/royalties' && request.method==='POST') return ingestRoyalties(request,env);
-      if (url.pathname==='/audit' && request.method==='GET') return audit(env);
+      if (url.pathname==='/ingest/payouts' && request.method==='POST') return await ingestPayouts(request,env);
+      if (url.pathname==='/ingest/royalties' && request.method==='POST') return await ingestRoyalties(request,env);
+      if (url.pathname==='/audit' && request.method==='GET') return await audit(env);
       if (url.pathname==='/trends' && request.method==='GET') {
         const result=await env.DB.prepare('SELECT topic,title,channel,published_at,captured_at FROM observed_videos ORDER BY captured_at DESC LIMIT 60').all();
         return reply(result.results);
@@ -223,9 +223,9 @@ export default {
         const result=await env.DB.prepare('SELECT id,platform,title,scheduled_at,status,provider_post_id,last_error FROM publish_queue ORDER BY created_at DESC LIMIT 100').all();
         return reply(result.results);
       }
-      if (url.pathname==='/queue' && request.method==='POST') return addToQueue(request,env);
+      if (url.pathname==='/queue' && request.method==='POST') return await addToQueue(request,env);
       const approveMatch=url.pathname.match(/^\/queue\/([0-9a-f-]+)\/approve$/);
-      if (approveMatch && request.method==='POST') return approve(request,env,approveMatch[1]);
+      if (approveMatch && request.method==='POST') return await approve(request,env,approveMatch[1]);
       return fail('Not found',404);
     } catch (error) { return fail(clean(error.message,500),400); }
   },
