@@ -11,13 +11,13 @@ function reply(data, status = 200) {
 }
 function fail(message, status = 400) { return reply({ error: message }, status); }
 function integerMoney(value, field) {
-  if (!/^\\d+(?:\\.\\d{1,3})?$/.test(String(value))) throw new Error(field + ': nonnegative INR amount required');
+  if (!/^\d+(?:\.\d{1,3})?$/.test(String(value))) throw new Error(field + ': nonnegative INR amount required');
   const result = Math.round(Number(value) * 100);
   if (!Number.isSafeInteger(result)) throw new Error(field + ': outside supported range');
   return result;
 }
 function checkDate(v) {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(v)) || Number.isNaN(Date.parse(v + 'T00:00:00Z'))) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v)) || Number.isNaN(Date.parse(v + 'T00:00:00Z'))) {
     throw new Error('Invalid ISO payment date');
   }
   return String(v);
@@ -69,7 +69,7 @@ async function ingestRoyalties(request, env) {
   if (!Array.isArray(data.records) || data.records.length < 1 || data.records.length > MAX_RECORDS) throw new Error('records must contain 1 to 200 royalty lines');
   for (const line of data.records) {
     const id=clean(line.id,120), period=clean(line.period,15), platform=clean(line.platform,80);
-    if (!id || !/^\\d{4}-\\d{2}$/.test(period) || !platform) throw new Error('Each line requires stable id, YYYY-MM period and platform');
+    if (!id || !/^\d{4}-\d{2}$/.test(period) || !platform) throw new Error('Each line requires stable id, YYYY-MM period and platform');
     const gross = line.platform_gross == null ? null : integerMoney(line.platform_gross,'platform_gross');
     const reported = line.artist_reported == null ? null : integerMoney(line.artist_reported,'artist_reported');
     const streams = line.streams == null ? null : Number(line.streams);
@@ -224,7 +224,7 @@ export default {
         return reply(result.results);
       }
       if (url.pathname==='/queue' && request.method==='POST') return addToQueue(request,env);
-      const approveMatch=url.pathname.match(/^\\/queue\\/([0-9a-f-]+)\\/approve$/);
+      const approveMatch=url.pathname.match(/^\/queue\/([0-9a-f-]+)\/approve$/);
       if (approveMatch && request.method==='POST') return approve(request,env,approveMatch[1]);
       return fail('Not found',404);
     } catch (error) { return fail(clean(error.message,500),400); }
