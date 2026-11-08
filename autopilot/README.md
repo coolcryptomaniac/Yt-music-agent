@@ -70,6 +70,12 @@ Add a post to the queue:
 An authenticated `POST /queue/<ID>/approve` with
 `{"rights_verified":true,"approved_by":"account-owner"}` marks it ready. YouTube jobs use `platform:"youtube"` and `r2_key:"music/reel.mp4"` rather than `media_url`.
 
+## Contract-rate review and bank confirmation
+
+Only if you know your **signed** Vusic plan and know that the exported `platform_gross` is before the contractual distributor share, set `CONTRACT_SHARE_STREAMING` and `CONTRACT_SHARE_CONTENT_ID` in the Worker configuration (for example `0.85` for an 85% artist share). The Worker compares these indicative expectations against imported artist royalties with a 2.5% or ₹1 tolerance and marks discrepancies for investigation. These rates are deliberately unset by default; foreign exchange, returns, withheld amounts, or a differently defined gross base can explain a flag.
+
+To mark an individual payment as received **after checking a bank statement**, call authenticated `POST /payouts/<ID>/verify-bank` with `{"receipt_confirmed":true}`. Never automatically equate Vusic's `net payable` with cash received.
+
 ## Vusic audit request and research requirements
 
 Collect **all** monthly statement exports with: original platform, store product, month earned, month reported, ISRC, UPC, country, usage type, paid stream count, gross platform amount, deductions, exchange rate, Vusic commission, artist share, Content ID claim ID, payment ID and TDS proof (Form 16A / Form 26AS / AIS as relevant). Only then compare against independent Spotify for Artists, YouTube Studio / Analytics or other authorized reports. Some aggregator data is delayed and may not exactly mirror platform dashboards.
