@@ -77,7 +77,26 @@ async function ingestRoyalties(request, env) {
     await env.DB.prepare('INSERT INTO royalty_lines (id,period,platform,isrc,title,streams,platform_gross_paise,artist_reported_paise,source) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET streams=excluded.streams,platform_gross_paise=excluded.platform_gross_paise,artist_reported_paise=excluded.artist_reported_paise,source=excluded.source')
       .bind(id,period,platform,clean(line.isrc,25) || null,clean(line.title,160) || null,streams,gross,reported,clean(line.source,120) || 'vusic-export').run();
   }
-  return reply({ imported:data.records.length, note:'Gross-vs-share checks require your signed plan and separate platform evidence; no unsupported fraud inference.' });
+  // Indicative share audit only when the account owner explicitly configures signed rates.
+  const lines = data.records;
+  let shareReviewed = 0;
+  for (const line of lines) {
+    if (line.platform_gross == null || line.artist_reported == null) continue;
+    const channel = String(line.platform || '');
+    const rateString = /youtube.*(ugc|content.?id)/i.test(channel) ? env.CONTRACT_SHARE_CONTENT_ID : env.CONTRACT_SHARE_STREAMING;
+    if (!rateString) continue;
+    const share = Number(rateString);
+    if (!(share > 0 && share <= 1)) throw new Error('Contract share must be decimal 0 to 1');
+    const gross = integerMoney(line.platform_gross,'platform_gross');
+    const reported = integerMoney(line.artist_reported,'artist_reported');
+    const expected = Math.round(gross * share);
+    shareReviewed++;
+    if (Math.abs(reported - expected) > Math.max(100, Math.round(gross * 0.025))) {
+      await flag(env,'share-check:' + clean(line.id,120),'contract-share','review',
+        'Reported artist royalty for ' + clean(line.id,100) + ' differs from nominal contract share. Confirm whether gross is pre-commission, currency FX, taxes, platform corrections, and the correct signed terms.');
+    }
+  }
+  return reply({ imported:data.records.length, share_reviewed:shareReviewed, note:'Share checks are provisional and apply only with owner-configured contract rates; not proof of underpayment.' });
 }
 async function audit(env) {
   const p = await env.DB.prepare('SELECT count(*) count,coalesce(sum(gross_paise),0) gross,coalesce(sum(tds_paise),0) tds,coalesce(sum(net_paise),0) net,coalesce(sum(bank_verified),0) bank_verified FROM payouts').first();
@@ -214,6 +233,13 @@ export default {
       if (!await authorized(request,env.ADMIN_TOKEN)) return fail('Unauthorized',401);
       if (url.pathname==='/ingest/payouts' && request.method==='POST') return await ingestPayouts(request,env);
       if (url.pathname==='/ingest/royalties' && request.method==='POST') return await ingestRoyalties(request,env);
+      const bankMatch=url.pathname.match(/^\/payouts\/([a-zA-Z0-9_.:-]+)\/verify-bank$/);
+      if (bankMatch && request.method==='POST') {
+        const data=await jsonBody(request);
+        if (data.receipt_confirmed !== true) throw new Error('Manually confirm bank credit before verification');
+        const result=await env.DB.prepare('UPDATE payouts SET bank_verified=1 WHERE id=?').bind(bankMatch[1]).run();
+        return reply({verified:result.meta.changes===1});
+      }
       if (url.pathname==='/audit' && request.method==='GET') return await audit(env);
       if (url.pathname==='/trends' && request.method==='GET') {
         const result=await env.DB.prepare('SELECT topic,title,channel,published_at,captured_at FROM observed_videos ORDER BY captured_at DESC LIMIT 60').all();
