@@ -1,0 +1,19 @@
+name: Music Autopilot Tests
+on:
+  pull_request:
+    paths:
+      - 'autopilot/**'
+      - '.github/workflows/music-autopilot-tests.yml'
+  push:
+    paths:
+      - 'autopilot/**'
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check autopilot/src/index.js
+      - run: npm test --prefix autopilot

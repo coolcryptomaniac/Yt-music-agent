@@ -1,0 +1,21 @@
+name = "vusic-music-autopilot"
+main = "src/index.js"
+compatibility_date = "2026-11-08"
+
+# Schedules are UTC. 12 checks daily; royalties still arrive on their normal monthly delay.
+[triggers]
+crons = ["0 */2 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vusic-music-autopilot"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "VIDEOS"
+bucket_name = "music-autopilot-videos"
+
+[vars]
+AUTO_PUBLISH = "false"
+TREND_TERMS = "Kumaoni music,Himalayan electronic music,original phonk music"
+# Never put credentials, access tokens, cookies, login emails, or bank data here.
