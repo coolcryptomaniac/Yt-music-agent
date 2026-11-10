@@ -1,3 +1,4 @@
+import { dailyCreativeBriefs } from './creative.js';
 /*
  * Vusic music-career autopilot: conservative, verified, account-authorized automation.
  * No browser automation, CAPTCHA evasion, cookies, passwords, synthetic streams,
@@ -202,6 +203,18 @@ async function youtubeUpload(env,job) {
   await env.DB.prepare("UPDATE publish_queue SET status='published_private',provider_post_id=?,updated_at=datetime('now') WHERE id=?")
     .bind(String(response.id),job.id).run();
 }
+async function planCreativeBriefs(env) {
+  const day = new Date().toISOString().slice(0, 10);
+  const ideas = dailyCreativeBriefs(day, Number(env.DAILY_IDEA_LIMIT || 1));
+  let inserted = 0;
+  for (const idea of ideas) {
+    const r = await env.DB.prepare("INSERT OR IGNORE INTO creative_briefs (id,utc_day,campaign_id,title,music_prompt,video_prompt,hook,short_format,long_format) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind(idea.id,idea.date,idea.campaign_id,idea.title,idea.music_prompt,idea.video_prompt,idea.hook,idea.short_format,idea.long_format).run();
+    inserted += r.meta.changes || 0;
+  }
+  await addRun(env,'creative_planning','ok',inserted + ' original creative briefs added for ' + day);
+}
+
 async function publishingCycle(env) {
   if (env.AUTO_PUBLISH !== 'true') return addRun(env,'publishing','disabled','Set AUTO_PUBLISH=true only after linking OAuth accounts and media');
   const rows=await env.DB.prepare("SELECT * FROM publish_queue WHERE ((status='approved' AND scheduled_at<=?) OR status='staged') ORDER BY scheduled_at LIMIT 4")
@@ -241,6 +254,10 @@ export default {
         return reply({verified:result.meta.changes===1});
       }
       if (url.pathname==='/audit' && request.method==='GET') return await audit(env);
+      if (url.pathname==='/creative/briefs' && request.method==='GET') {
+        const result=await env.DB.prepare("SELECT id,utc_day,campaign_id,title,music_prompt,video_prompt,hook,short_format,long_format,status,created_at FROM creative_briefs ORDER BY utc_day DESC, id LIMIT 40").all();
+        return reply({ briefs:result.results, note:'Original creative concepts, not generated music, videos or released recordings.' });
+      }
       if (url.pathname==='/trends' && request.method==='GET') {
         const result=await env.DB.prepare('SELECT topic,title,channel,published_at,captured_at FROM observed_videos ORDER BY captured_at DESC LIMIT 60').all();
         return reply(result.results);
@@ -257,6 +274,7 @@ export default {
   },
   async scheduled(controller,env,ctx) {
     ctx.waitUntil((async()=>{
+      try { await planCreativeBriefs(env); } catch(e) { await addRun(env,'creative_planning','failed',e.message); }
       try { await discoverTrends(env); } catch(e) { await addRun(env,'trends','failed',e.message); }
       try { await publishingCycle(env); } catch(e) { await addRun(env,'publishing','failed',e.message); }
     })());
