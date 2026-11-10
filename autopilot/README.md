@@ -70,6 +70,23 @@ Add a post to the queue:
 An authenticated `POST /queue/<ID>/approve` with
 `{"rights_verified":true,"approved_by":"account-owner"}` marks it ready. YouTube jobs use `platform:"youtube"` and `r2_key:"music/reel.mp4"` rather than `media_url`.
 
+
+## Automated creative planning, media generation and publishing path
+
+Every two-hour cycle generates **at most one new original music/video brief per UTC day** by default (maximum two configured via `DAILY_IDEA_LIMIT`). Repeated cycle invocations are idempotent. An authorized call to `GET /creative/briefs` shows the latest Suno-style music prompts, video prompts, hooks, 9:16 Short/Reel specifications and 16:9 full-length specifications.
+
+These ideas require **zero AI-generation credits**. Creating a prompt is not creating an audio recording or film. For each proposed track, the operator or an authorized Suno MCP client must generate a small number of candidates, check music rights, download the finished track using Suno's approved flow and hand it to the existing `Yt-music-agent` Python/FFmpeg renderer for a story-led video. The finished file can be uploaded to Cloudflare R2 and added via the authenticated `POST /queue` endpoint, reviewed, then published through the already-integrated YouTube/Meta official APIs after proper OAuth and `AUTO_PUBLISH=true`.
+
+**Suno MCP requires user authorization** using `https://api.suno.com/mcp`. It is not yet connected to Cloudflare Workers; no MCP proxy credentials or undocumented API endpoints should be assumed. Suno uses plan credits and paid-plan output licensing for commercial releases. Avoid free-tier commercial releases and AI covers that lack rights.
+
+**Vusic:** Until Vusic confirms an official royalty export or API, import authorized reports manually through authenticated `POST /ingest/payouts` and `POST /ingest/royalties`. Automatic third-party account login, CAPTCHA bypass, and scrape-based release submission are deliberately excluded.
+
+**Instagram:** Linking a professional account and app publishing permissions is mandatory; the user's currently connected Metricool plugin has no linked social accounts. Connect them in Metricool or create official Meta OAuth credentials if using this Worker directly.
+
+**YouTube:** Uploaded videos are first created private and require review. Every music upload needs correct rights and disclosure decisions. Long videos should be rendered on a machine or job runner with FFmpeg; the Worker is a scheduler and API orchestrator, not a GPU renderer.
+
+Budget discipline: Generate one genuine music experiment at a time, reuse existing commercially authorized tracks when possible, and review metrics before spending Suno credits or booking paid media.
+
 ## Contract-rate review and bank confirmation
 
 Only if you know your **signed** Vusic plan and know that the exported `platform_gross` is before the contractual distributor share, set `CONTRACT_SHARE_STREAMING` and `CONTRACT_SHARE_CONTENT_ID` in the Worker configuration (for example `0.85` for an 85% artist share). The Worker compares these indicative expectations against imported artist royalties with a 2.5% or ₹1 tolerance and marks discrepancies for investigation. These rates are deliberately unset by default; foreign exchange, returns, withheld amounts, or a differently defined gross base can explain a flag.
