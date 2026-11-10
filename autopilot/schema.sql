@@ -72,3 +72,19 @@ CREATE TABLE IF NOT EXISTS autopilot_runs (
   notes TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- New creative briefs are ideas, never paid generations or published posts.
+CREATE TABLE IF NOT EXISTS creative_briefs (
+  id TEXT PRIMARY KEY,
+  utc_day TEXT NOT NULL,
+  campaign_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  music_prompt TEXT NOT NULL,
+  video_prompt TEXT NOT NULL,
+  hook TEXT NOT NULL,
+  short_format TEXT NOT NULL,
+  long_format TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'idea' CHECK(status IN ('idea','selected','rejected')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_creative_day ON creative_briefs(utc_day);
